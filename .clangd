@@ -1,0 +1,5 @@
+CompileFlags:
+  Add:  
+    [ "-I/opt/gcc-arm-none-eabi-14.2/arm-none-eabi/include"
+    ]
+  Compiler: arm-none-eabi-gcc 
