@@ -28,21 +28,25 @@
 #define BLE_UUID_ST_MVMT_SERVICE        0xaa80                      /**< The UUID of the SensorTag Movement Service. */
 #define BLE_UUID_ST_LUXO_SERVICE        0xaa70                      /**< The UUID of the SensorTag Luxometer Service. */
 #define BLE_UUID_ST_TEMP_SERVICE        0xaa00
-#define BLE_UUID_ST_LX_DATA_CHRC        0xaa71                      /**< The UUID of the SensorTag Luxometer Data Characteristic. */
-#define BLE_UUID_ST_LX_CONF_CHRC        0xaa72                      /**< The UUID of the SensorTag Luxometer Configuration Characteristic. */
-#define BLE_UUID_ST_LX_PERI_CHRC        0xaa73                      /**< The UUID of the SensorTag Luxometer Transmission Period Characteristic. */
 
 #define BLE_ST_CONF_CHRC_MSG_LEN        1 
 
+/* Most of the SensorTag services have three characteristics: DATA, CONFiguration, PERIod */
+typedef enum {
+    DATA_UUID_OFFSET = 1,
+    CONF_UUID_OFFSET,
+    PERI_UUID_OFFSET
+} ble_uuid_offsets_t;
 
 /* Client event object and event types, configuration object and its associated handler ------------------------------------------------------- */
 
 /**@brief SensorTag Client event type. */
 typedef enum
 {
-    BLE_ST_C_EVT_DISCOVERY_COMPLETE = 1, // Event indicating that the ST services and their characteristics are resolved 
-    BLE_ST_C_EVT_LX_DATA_EVT,            // Event indicating that the central has received an LX characteristic notification
-    BLE_ST_C_EVT_DISCONNECTED            // Event indicating that the ST has disconnected
+    BLE_ST_C_EVT_LX_DATA_EVT = 1,                               // Event indicating that the central has received an LX characteristic notification
+    BLE_ST_C_EVT_DISCONNECTED,                                  // Event indicating that the ST has disconnected
+    BLE_ST_C_EVT_LUXO_READY = BLE_UUID_ST_LUXO_SERVICE,         // Event indicating that the LUXO service is discovered 
+    BLE_ST_C_EVT_TEMP_READY = BLE_UUID_ST_TEMP_SERVICE,         // Event indicating that the TEMP service is discovered 
 } ble_st_c_evt_type_t;
 
 /**@brief SensorTag data with validity flag
@@ -65,11 +69,12 @@ typedef struct {
 /**@brief Handles on the connected peer device
 */
 typedef struct {
-    uint16_t            luxo_data_handle;       // handle for data characteristic of LX service (light level)
-    uint16_t            luxo_data_cccd_handle;  // Client Characteristic Configuration Descriptor (0x2902) 
-    uint16_t            luxo_conf_handle;       // handle for conf characteristic, to switch LX service ON/OFF 
-    uint16_t            luxo_peri_handle;       // handle for period characteristic, controls data reading frequency
-} ble_st_c_handles_t;
+    uint16_t            uuid;
+    uint16_t            data_handle;       // handle for data characteristic of LX service (light level)
+    uint16_t            data_cccd_handle;  // Client Characteristic Configuration Descriptor (0x2902) 
+    uint16_t            conf_handle;       // handle for conf characteristic, to switch LX service ON/OFF 
+    uint16_t            peri_handle;       // handle for period characteristic, controls data reading frequency
+} ble_st_c_service_t;
 
 
 typedef struct ble_st_c_s ble_st_c_t;
@@ -81,14 +86,17 @@ typedef struct ble_st_c_s ble_st_c_t;
  */
 typedef void (* ble_st_c_evt_handler_t)(ble_st_c_t * p_ble_st_c, const ble_st_c_evt_t * p_evt);
 
+
+
 /**@brief BLE SensorTag Client structure.
  */
 struct ble_st_c_s
 {
-    uint8_t                 uuid_type;          /*< Base UUID type. */
     uint16_t                conn_handle;        /*< Handle of the current connection. Set with @ref ble_nus_c_handles_assign when connected. */
-    ble_st_c_handles_t      handles;            /*< Handles on the connected peer device needed to interact with it. */
+    uint8_t                 uuid_type;          /*< Base UUID type. */
+    uint8_t                 service_count;      /* total number of services */ 
     ble_st_c_evt_handler_t  evt_handler;        /*< Application event handler to be called when there is an event related to the NUS. */
+    ble_st_c_service_t      services[2];        /*< Handles on the connected peer device needed to interact with it. */
 };
 
 

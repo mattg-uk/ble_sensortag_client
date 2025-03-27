@@ -1,13 +1,17 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 #include "ble_sensortag_client.h"
 
 #include "ble_gattc.h"
 #include "sdk_macros.h"
 
+
 // ALL of these UUIDs will have the same base .type because they have a common UUID 14-byte signature
+
+static const uint16_t service_uuids[] = { BLE_UUID_ST_LUXO_SERVICE, BLE_UUID_ST_TEMP_SERVICE };
 
 uint32_t ble_st_c_add_vs_base_uuid(ble_st_c_t * p_ble_st_c)
 {
@@ -21,7 +25,7 @@ uint32_t ble_st_c_add_vs_base_uuid(ble_st_c_t * p_ble_st_c)
 uint32_t ble_st_c_init(ble_st_c_t * p_ble_st_c, ble_st_c_init_t * p_ble_st_c_init)
 {
     uint32_t        err_code = 0;
-    ble_uuid_t      st_lx_uuid;
+    ble_uuid_t      st_service_uuid;
 
     VERIFY_PARAM_NOT_NULL(p_ble_st_c);
     VERIFY_PARAM_NOT_NULL(p_ble_st_c_init);
@@ -35,14 +39,24 @@ uint32_t ble_st_c_init(ble_st_c_t * p_ble_st_c, ble_st_c_init_t * p_ble_st_c_ini
 
     p_ble_st_c->conn_handle = BLE_CONN_HANDLE_INVALID;
     p_ble_st_c->evt_handler = p_ble_st_c_init->evt_handler;
-    p_ble_st_c->handles.luxo_data_handle = BLE_CONN_HANDLE_INVALID;
-    p_ble_st_c->handles.luxo_conf_handle = BLE_CONN_HANDLE_INVALID;
-    p_ble_st_c->handles.luxo_peri_handle = BLE_CONN_HANDLE_INVALID;
+    
+    const uint8_t total_services = sizeof(p_ble_st_c->services) / sizeof(ble_st_c_service_t);
+    static_assert(total_services == sizeof(service_uuids) / sizeof(uint16_t));
+    p_ble_st_c->service_count = total_services;
 
-    st_lx_uuid.type = p_ble_st_c->uuid_type;
-    st_lx_uuid.uuid = BLE_UUID_ST_LUXO_SERVICE;
+    for (uint8_t service = 0; service < total_services && !err_code; ++service) {
+        p_ble_st_c->services[service].uuid = service_uuids[service];
+        p_ble_st_c->services[service].data_handle = BLE_CONN_HANDLE_INVALID;
+        p_ble_st_c->services[service].data_cccd_handle = BLE_CONN_HANDLE_INVALID; 
+        p_ble_st_c->services[service].conf_handle = BLE_CONN_HANDLE_INVALID;
+        p_ble_st_c->services[service].peri_handle = BLE_CONN_HANDLE_INVALID;
 
-    return ble_db_discovery_evt_register(&st_lx_uuid);
+        st_service_uuid.uuid = service_uuids[service];
+        st_service_uuid.type = p_ble_st_c->uuid_type;
+        err_code = ble_db_discovery_evt_register(&st_service_uuid);
+    }
+
+    return err_code;
 }
 
 ble_uuid_t ble_st_c_get_typed_uuid(ble_st_c_t* p_ble_st_c, uint16_t uuid)
@@ -59,32 +73,48 @@ void ble_st_c_on_db_disc_evt(ble_st_c_t *p_ble_st_c, ble_db_discovery_evt_t * p_
     if (p_ble_st_c == NULL) {
         return;
     }
-
-    ble_st_c_evt_t st_c_evt;
-    memset(&st_c_evt, 0, sizeof(ble_st_c_evt_t));
     
-    if (p_evt->evt_type == BLE_DB_DISCOVERY_COMPLETE &&
-        p_evt->params.discovered_db.srv_uuid.uuid == BLE_UUID_ST_LUXO_SERVICE &&
-        p_evt->params.discovered_db.srv_uuid.type == p_ble_st_c->uuid_type)
-    {
-        printf("LUXO Service discovered\n"); 
+    switch (p_evt->evt_type) {
+
+    case BLE_DB_DISCOVERY_COMPLETE:
+        if (p_evt->params.discovered_db.srv_uuid.type != p_ble_st_c->uuid_type) {
+            return;
+        }
+        ble_st_c_evt_t st_c_evt;
+        memset(&st_c_evt, 0, sizeof(ble_st_c_evt_t));
+        
+        uint16_t service_uuid = p_evt->params.discovered_db.srv_uuid.uuid;
+        printf("[GATT] Service discovered: %x\n", service_uuid);
+       
+        uint8_t index = 0;
+        while (index < p_ble_st_c->service_count &&
+               service_uuids[index] != service_uuid) {
+            ++index;
+        }
+        if (index >= p_ble_st_c->service_count) 
+            break; 
         
         p_ble_st_c->conn_handle = p_evt->conn_handle; 
         ble_gatt_db_char_t * p_chars = p_evt->params.discovered_db.charateristics;
 
         for (uint8_t i = 0; i < p_evt->params.discovered_db.char_count; ++i)
         {   
-            switch (p_chars[i].characteristic.uuid.uuid)
+            uint16_t characteristic = p_chars[i].characteristic.uuid.uuid;
+            uint16_t offset = characteristic - service_uuid;
+            switch (offset)
             {
-            case BLE_UUID_ST_LX_DATA_CHRC:
-                p_ble_st_c->handles.luxo_data_handle = p_chars[i].characteristic.handle_value;
-                p_ble_st_c->handles.luxo_data_cccd_handle = p_chars[i].cccd_handle;
+            case DATA_UUID_OFFSET:
+                p_ble_st_c->services[index].data_handle = p_chars[i].characteristic.handle_value;
+                p_ble_st_c->services[index].data_cccd_handle = p_chars[i].cccd_handle;
                 break;
-            case BLE_UUID_ST_LX_CONF_CHRC:
-                p_ble_st_c->handles.luxo_conf_handle = p_chars[i].characteristic.handle_value;
+            case CONF_UUID_OFFSET:
+                p_ble_st_c->services[index].conf_handle = p_chars[i].characteristic.handle_value;
                 break;
-            case BLE_UUID_ST_LX_PERI_CHRC:
-                p_ble_st_c->handles.luxo_peri_handle = p_chars[i].characteristic.handle_value;
+            case PERI_UUID_OFFSET:
+                p_ble_st_c->services[index].peri_handle = p_chars[i].characteristic.handle_value;
+                break;
+            default:
+                printf("[GATT] Service %x discarded characteristic %x", service_uuid, characteristic);
                 break;
             }
         }
@@ -92,9 +122,17 @@ void ble_st_c_on_db_disc_evt(ble_st_c_t *p_ble_st_c, ble_db_discovery_evt_t * p_
         if (p_ble_st_c->evt_handler != NULL) 
         {
             st_c_evt.conn_handle = p_evt->conn_handle;
-            st_c_evt.evt_type    = BLE_ST_C_EVT_DISCOVERY_COMPLETE;
+            st_c_evt.evt_type    = service_uuid;
             p_ble_st_c->evt_handler(p_ble_st_c, &st_c_evt);
         }
+        break;
+    case BLE_DB_DISCOVERY_SRV_NOT_FOUND:
+        printf("Could not find the service!\n");
+        break;
+    case BLE_DB_DISCOVERY_AVAILABLE:
+        printf("Discovery available\n");
+    default:
+        break;
     }
 }
 /**@brief Handle Value Notification received from the softdevice
@@ -108,8 +146,8 @@ void ble_st_c_on_db_disc_evt(ble_st_c_t *p_ble_st_c, ble_db_discovery_evt_t * p_
 */
 void on_hvx(ble_st_c_t *p_ble_st_c, const ble_evt_t *p_ble_evt)
 {
-    if ( (p_ble_st_c->handles.luxo_data_handle != BLE_GATT_HANDLE_INVALID)
-       &&(p_ble_evt->evt.gattc_evt.params.hvx.handle == p_ble_st_c->handles.luxo_data_handle)
+    if ( (p_ble_st_c->services[0].data_handle != BLE_GATT_HANDLE_INVALID)
+       &&(p_ble_evt->evt.gattc_evt.params.hvx.handle == p_ble_st_c->services[0].data_handle)
        &&(p_ble_st_c->evt_handler != NULL) )
     {
         ble_st_c_evt_t ble_st_c_evt  = {
@@ -179,10 +217,10 @@ uint32_t ble_st_c_lux_data_start_notify(ble_st_c_t *p_ble_st_c, bool on)
 {
     VERIFY_PARAM_NOT_NULL(p_ble_st_c);
     if ((p_ble_st_c->conn_handle == BLE_CONN_HANDLE_INVALID)
-       || (p_ble_st_c->handles.luxo_data_cccd_handle == BLE_GATT_HANDLE_INVALID)) {
+       || (p_ble_st_c->services[0].data_cccd_handle == BLE_GATT_HANDLE_INVALID)) {
         return NRF_ERROR_INVALID_STATE;
     }
-    return cccd_configure(p_ble_st_c->conn_handle, p_ble_st_c->handles.luxo_data_cccd_handle, on);
+    return cccd_configure(p_ble_st_c->conn_handle, p_ble_st_c->services[0].data_cccd_handle, on);
 }
 
 uint32_t ble_st_c_lux_conf_enable(ble_st_c_t *p_ble_st_c, bool on)
@@ -190,7 +228,7 @@ uint32_t ble_st_c_lux_conf_enable(ble_st_c_t *p_ble_st_c, bool on)
     // The command for writing a one to the conf parameter is very similar to writing it to the cccd
     VERIFY_PARAM_NOT_NULL(p_ble_st_c);
     if ((p_ble_st_c->conn_handle == BLE_CONN_HANDLE_INVALID)
-       || (p_ble_st_c->handles.luxo_conf_handle == BLE_GATT_HANDLE_INVALID)) {
+       || (p_ble_st_c->services[0].conf_handle == BLE_GATT_HANDLE_INVALID)) {
         return NRF_ERROR_INVALID_STATE;
     }
     
@@ -200,7 +238,7 @@ uint32_t ble_st_c_lux_conf_enable(ble_st_c_t *p_ble_st_c, bool on)
     const ble_gattc_write_params_t write_params = {
         .write_op = BLE_GATT_OP_WRITE_CMD,
         .flags    = BLE_GATT_EXEC_WRITE_FLAG_PREPARED_WRITE,
-        .handle   = p_ble_st_c->handles.luxo_conf_handle,
+        .handle   = p_ble_st_c->services[0].conf_handle,
         .offset   = 0,
         .len      = sizeof(buf),
         .p_value  = buf

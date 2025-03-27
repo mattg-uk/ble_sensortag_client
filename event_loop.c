@@ -147,8 +147,10 @@ void ble_st_c_evt_handler( ble_st_c_t * p_ble_st_c, const ble_st_c_evt_t * p_st_
 {
     switch(p_st_c_evt->evt_type)
     {
-        case BLE_ST_C_EVT_DISCOVERY_COMPLETE:
+        case BLE_ST_C_EVT_LUXO_READY:
             luxometer_enable(p_ble_st_c, true); 
+            break;
+        case BLE_ST_C_EVT_TEMP_READY:
             break;
         case BLE_ST_C_EVT_LX_DATA_EVT:
             ble_st_c_data_t value = extract_luxometer_data(p_st_c_evt); 
@@ -159,6 +161,8 @@ void ble_st_c_evt_handler( ble_st_c_t * p_ble_st_c, const ble_st_c_evt_t * p_st_
         case BLE_ST_C_EVT_DISCONNECTED:
             printf("Disconnected!\n");
             scan_start();
+            break;
+        default:
             break;
     }
 }
