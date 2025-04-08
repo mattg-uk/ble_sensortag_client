@@ -1,21 +1,19 @@
+/* MIT License
+ *
+ * Copyright (c) 2025 Matthew Nathan Green
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, andor sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ */
 
 #include "event_loop.h"
-#include "app_error.h"
-
-/**@brief Function for asserts in the SoftDevice.
- *
- * @details This function will be called in case of an assert in the SoftDevice -
- *          effectively resets the device.
- * 
- * @warning On assert from the SoftDevice, the system can only recover on reset.
- *
- * @param[in] line_num     Line number of the failing ASSERT call.
- * @param[in] p_file_name  File name of the failing ASSERT call.
- */
-void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
-{
-    app_error_handler(0xDEADBEEF, line_num, p_file_name);
-}
 
 int main(void)
 {

@@ -3,7 +3,13 @@ TARGETS          := nrf51422_xxac
 OUTPUT_DIRECTORY := build
 
 PROJ_DIR := .
-SDK_ROOT := /opt/nRF5_SDK_12.3.0_d7731ad
+
+ifndef NRF_SDK_ROOT
+	SDK_ROOT := /opt/nRF5_SDK_12.3.0_d7731ad
+else
+	SDK_ROOT := ${NRF_SDK_ROOT}
+endif
+$(info Using Nordic SDK_ROOT: ${SDK_ROOT})
 
 TEMPLATE_PATH := $(SDK_ROOT)/components/toolchain/gcc
 include $(TEMPLATE_PATH)/Makefile.common
@@ -15,7 +21,7 @@ $(OUTPUT_DIRECTORY)/nrf51422_xxac.out: \
 SRC_FILES += \
   $(PROJ_DIR)/main.c \
   $(PROJ_DIR)/ble_sensortag_client.c \
-  $(PROJ_DIR)/init_support.c \
+  $(PROJ_DIR)/lifecycle_support.c \
   $(PROJ_DIR)/scan_support.c \
   $(PROJ_DIR)/event_loop.c \
 
@@ -200,6 +206,7 @@ ASMFLAGS += -DNRF_SD_BLE_API_VERSION=2
 # Linker flags
 LDFLAGS += -mthumb -mabi=aapcs -L $(TEMPLATE_PATH) -T$(LINKER_SCRIPT)
 LDFLAGS += -mcpu=cortex-m0
+LDFLAGS += -u_printf_float 
 # let linker to dump unused sections
 LDFLAGS += -Wl,--gc-sections
 # use newlib in nano version

@@ -44,41 +44,75 @@
  * 
  */
 
-#ifndef SCAN_SUPPORT_H
-#define SCAN_SUPPORT_H
+#ifndef LIFECYCLE_SUPPORT_H
+#define LIFECYCLE_SUPPORT_H
 
-#include "ble_gap.h"
+#include "app_uart.h"
+#include "bsp.h"
+#include "ble_db_discovery.h"
+#include "ble_stack_handler_types.h"
+#include "ble_sensortag_client.h"
 
-/**@brief   Begins scanning for connection targets.
+
+/**@brief Function for initializing the application timer
+ */
+void timer_init(void);
+
+
+/**@brief Function for initializing the UART.
  *
- * @details Scan parameters are configured in the .c file
+ * @param[in] uart_event_handler        event loop function to handle UART events 
+ */
+void uart_init(app_uart_event_handler_t uart_event_handler);
+
+
+/**@brief Function for initializing buttons and leds.
+ *
+ * @param[in] bsp_event_handler        event loop function to handle 'hardware' events 
+ */
+void buttons_leds_init(bsp_event_callback_t bsp_event_handler);
+
+
+/**@brief Function for initializing the Database Discovery Module.
+ *
+ * @param[in] discovery_handler        event loop function to handle discovery events 
+ */
+void db_discovery_init(ble_db_discovery_evt_handler_t discovery_handler);
+
+
+/**@brief Function for initializing the BLE stack.
+ *
+ * @details Initializes the SoftDevice and the BLE event interrupt.
+ * @param[in] ble_event_handler        event loop function to handle GAP events 
+ */
+void ble_stack_init(ble_evt_handler_t ble_event_handler);
+
+
+/**@brief Function for initializing the SensorTag Client
  * 
+ * @param[in] sensor_tag_client         client structure to be initialized
+ * @param[in] sensor_tag_event_handler  event loop function to handle CLIENT events 
  */
-void scan_start(void);
+void st_c_init(st_client_t* sensor_tag_client, 
+               st_client_evt_handler_t sensor_tag_event_handler);
 
 
-/**@brief   Attempts to connect to the target.
+/**@brief Function for asserts in the SoftDevice.
  *
- * @details Connection parameters are configured in the .c file
+ * @details This function will be called in case of an assert in the SoftDevice -
+ *          effectively resets the device.
  * 
- * @param[in]   p_gap_address The connection target address
+ * @warning On assert from the SoftDevice, the system can only recover on reset.
  *
+ * @param[in] line_num     Line number of the failing ASSERT call.
+ * @param[in] p_file_name  File name of the failing ASSERT call.
  */
-void connect_peer(const ble_gap_addr_t* p_gap_address);
+void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name);
 
 
-/**@brief Reads an advertising report and checks if a uuid is present in the service list.
- *
- * @details The function is able to search for 16-bit, 32-bit and 128-bit service uuids. 
- *          To see the format of a advertisement packet, see 
- *          https://www.bluetooth.org/Technical/AssignedNumbers/generic_access_profile.htm
- *
- * @param[in]   p_target_uuid The uuid to search fir
- * @param[in]   p_adv_report  Pointer to the advertisement report.
- *
- * @retval      true if the UUID is present in the advertisement report. Otherwise false  
+/**@brief Function for putting the chip into sleep mode.
+ * @note This function will not return.
  */
-bool is_uuid_present(const ble_uuid_t *p_target_uuid, 
-                            const ble_gap_evt_adv_report_t *p_adv_report);
+void sleep_mode_enter(void);
 
-#endif // SCAN_SUPPORT_H
+#endif // LIFECYCLE_SUPPORT_H
